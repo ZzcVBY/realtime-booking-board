@@ -46,6 +46,23 @@ export function Board({ auth, onLogout }: Props) {
 
   const bookAction = useBook();
   const cancelAction = useCancel();
+  const deleteSlot = useMutation({
+    mutationFn: (slot: SlotView) => api.deleteSlot(slot.id),
+    onMutate: async (slot) => {
+      await queryClient.cancelQueries({ queryKey: ["slots"] });
+      const previous = queryClient.getQueryData<SlotView[]>(["slots"]);
+      queryClient.setQueryData<SlotView[]>(["slots"], (old) =>
+        old ? old.filter((s) => s.id !== slot.id) : old,
+      );
+      return { previous };
+    },
+    onError: (e, _slot, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["slots"], ctx.previous);
+      push(errMsg(e), "error");
+    },
+    onSuccess: (_d, slot) => push(`已删除「${slot.title}」`, "success"),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+  });
 
   const handleBook = (slot: SlotView) => {
     bookAction.mutate(
@@ -68,11 +85,7 @@ export function Board({ auth, onLogout }: Props) {
   };
 
   const handleDelete = (slot: SlotView) => {
-    api
-      .deleteSlot(slot.id)
-      .then(() => push(`已删除「${slot.title}」`, "success"))
-      .catch((e) => push(errMsg(e), "error"))
-      .finally(() => queryClient.invalidateQueries({ queryKey: ["slots"] }));
+    deleteSlot.mutate(slot);
   };
 
   return (
@@ -125,11 +138,13 @@ export function Board({ auth, onLogout }: Props) {
         />
       </div>
 
-      <CreateSlotModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSubmit={(input) => createSlot.mutate(input)}
-      />
+      {modalOpen && (
+        <CreateSlotModal
+          open
+          onClose={() => setModalOpen(false)}
+          onSubmit={(input) => createSlot.mutate(input)}
+        />
+      )}
 
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
         {toasts.map((t) => (

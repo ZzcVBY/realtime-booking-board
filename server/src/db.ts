@@ -146,29 +146,38 @@ export function getUserById(db: DatabaseSync, id: number): User | undefined {
 
 // ---------- slots / bookings ----------
 export function listSlotViews(db: DatabaseSync): SlotView[] {
+  // 聚合 + 关联一次取回，避免在内存里做 O(n*m) 的过滤拼装
   const slots = db
     .prepare(
-      `SELECT id, title, description, start_time as startTime, end_time as endTime,
-              capacity, creator_id as creatorId, created_at as createdAt
-       FROM slots ORDER BY start_time ASC`,
+      `SELECT s.id, s.title, s.description, s.start_time as startTime, s.end_time as endTime,
+              s.capacity, s.creator_id as creatorId, s.created_at as createdAt,
+              u.username as creatorName, COALESCE(bc.n, 0) as bookedCount
+       FROM slots s
+       LEFT JOIN users u ON u.id = s.creator_id
+       LEFT JOIN (
+         SELECT slot_id, COUNT(*) AS n FROM bookings WHERE status = 'active' GROUP BY slot_id
+       ) bc ON bc.slot_id = s.id
+       ORDER BY s.start_time ASC`,
     )
-    .all() as unknown as Slot[];
+    .all() as unknown as Omit<SlotView, "bookings">[];
   const bookingRows = db
     .prepare(
-      `SELECT id, slot_id as slotId, user_id as userId, status, created_at as createdAt
-       FROM bookings WHERE status = 'active' ORDER BY created_at ASC`,
+      `SELECT b.id as id, b.slot_id as slotId, b.user_id as userId, b.status as status,
+              b.created_at as createdAt, u.username as userName
+       FROM bookings b JOIN users u ON u.id = b.user_id
+       WHERE b.status = 'active' ORDER BY b.created_at ASC`,
     )
-    .all() as unknown as (Omit<Booking, "userName">)[];
-  const userMap = new Map(
-    (db.prepare("SELECT id, username FROM users").all() as { id: number; username: string }[]).map(
-      (u) => [u.id, u.username],
-    ),
-  );
+    .all() as unknown as Booking[];
+  const bySlot = new Map<number, Booking[]>();
+  for (const b of bookingRows) {
+    const arr = bySlot.get(b.slotId) ?? [];
+    arr.push(b);
+    bySlot.set(b.slotId, arr);
+  }
   return slots.map((s) => {
-    const bookings = bookingRows
-      .filter((b) => b.slotId === s.id)
-      .map((b) => ({ ...b, userName: userMap.get(b.userId) ?? "已注销" }));
-    return { ...s, creatorName: userMap.get(s.creatorId) ?? "已注销", bookings, bookedCount: bookings.length };
+    const bookings = bySlot.get(s.id) ?? [];
+    // 以实际预约行数为准，保证与前端展示一致
+    return { ...s, creatorName: s.creatorName ?? "已注销", bookings, bookedCount: bookings.length };
   });
 }
 

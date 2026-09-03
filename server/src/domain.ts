@@ -38,7 +38,6 @@ export interface ValidatedSlot {
   creatorId: number;
 }
 
-export const MIN_SLOT_DURATION_MS = 1; // 至少 1ms，实际按分钟
 export const MAX_SLOT_DURATION_MS = 6 * 60 * 60 * 1000; // 单次最多 6 小时
 
 /** 判断两个区间是否重叠（半开区间 [start,end) ，边界相接不算重叠） */
@@ -66,6 +65,11 @@ export function validateNewSlot(input: NewSlotInput, nowMs: number): Result<Vali
   if (endTime - startTime > MAX_SLOT_DURATION_MS) return fail("INVALID_INPUT", "单次排班最长 6 小时");
   if (startTime < nowMs) return fail("PAST_SLOT", "不能创建过去的排班");
 
+  const creatorId = Number(input.creatorId);
+  if (!Number.isInteger(creatorId) || creatorId < 1) {
+    return fail("INVALID_INPUT", "创建者无效");
+  }
+
   const capacity = input.capacity == null ? 1 : Math.floor(Number(input.capacity));
   if (!Number.isFinite(capacity) || capacity < 1 || capacity > 64) {
     return fail("INVALID_INPUT", "容量需为 1–64");
@@ -77,7 +81,7 @@ export function validateNewSlot(input: NewSlotInput, nowMs: number): Result<Vali
     startTime,
     endTime,
     capacity,
-    creatorId: Number(input.creatorId),
+    creatorId,
   });
 }
 
