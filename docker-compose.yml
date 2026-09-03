@@ -1,0 +1,16 @@
+services:
+  booking-board:
+    build: .
+    image: realtime-booking-board:latest
+    container_name: realtime-booking-board
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      # 数据库持久化到容器内挂载卷，避免每次重建丢数据
+      - DB_PATH=/app/data/data.db
+    volumes:
+      - booking-board-data:/app/data
+
+volumes:
+  booking-board-data:

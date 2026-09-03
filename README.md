@@ -150,6 +150,12 @@ docker run -p 3000:3000 realtime-booking-board
 # http://localhost:3000
 ```
 
+或用 docker compose：
+
+```bash
+docker compose up --build
+```
+
 ### 实时冒烟测试（真连 Socket.IO）
 
 ```bash
@@ -217,4 +223,4 @@ code/
 - 用户维度视图（"我的预约"）。
 - 周/月日历视图切换。
 - 用 Postgres + Redis 做多实例横向扩展。
-- 补 Lighthouse 性能基准与 CI（lint + test + typecheck + build）。
+- 补 Lighthouse 性能基准（当前有构建 gzip 数据 + 代码层虚拟化保证）。
