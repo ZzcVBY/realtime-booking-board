@@ -14,6 +14,7 @@
 | 需求/设计稿 → 界面 | 响应式布局，同一组件在手机/桌面自适应 |
 | 交互 + 数据展示 | 新建 / 预约 / 取消 / 删除，真实接口，数据来自后端 + 实时推送 |
 | 后端交互 → 全链路 | 自己写的 REST + 内嵌 SQLite + 外键级联 |
+| 鉴权 | JWT（服务端签发/校验）+ scrypt 密码哈希 + 权限校验，所有写操作身份均取自 token |
 | 实时协同 | Socket.IO，多人打开页面，任何写操作所有端即时同步 |
 | 性能 | 虚拟化列表 / 请求缓存去重 / 代码分包 / 防抖（见下方实测数据） |
 | AI 判断 | 样板代码交给 AI，核心规则、并发一致性、性能路径、安全边界自己掌控 |
@@ -89,6 +90,14 @@ graph TD
 ### 4. 状态分两类
 - **服务端状态**（排班列表）：Query 缓存 + Socket 实时写缓存。
 - **一次性 UI 状态**（弹窗、toast、昵称）：`useState` / `localStorage`。
+
+### 5. 真正的登录鉴权（安全边界）
+- 密码用 **crypto.scrypt 加盐哈希**存储（零原生依赖），不存明文。
+- 登录/注册后签发 **JWT**（7 天），后续请求带 `Authorization: Bearer <token>`。
+- **身份一律从 token 解析**，前端 body 不再传 `userId` / `creatorId`，无法通过改请求体冒充别人。
+- 服务端按 token 中的身份做权限校验：只有创建者能删除排班、只有预约者能取消预约。
+- 除 `/api/auth/*` 与健康检查外，其余 `/api` 全部要求登录；Socket.IO 连接握手同样校验 token。
+- 可查看：`server/src/auth.ts`、`server/src/routes.ts`、`server/src/socket.ts`。
 
 ---
 
@@ -172,10 +181,13 @@ node scripts/realtime-smoke.mjs
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查 |
 | GET | `/api/slots` | 列出全部排班位（含预约与占用数） |
-| POST | `/api/slots` | 新建排班位 |
-| DELETE | `/api/slots/:id` | 删除（仅创建者；body/query 传 `requesterId`） |
-| POST | `/api/slots/:id/book` | 预约（body 传 `userId`） |
-| POST | `/api/bookings/:id/cancel` | 取消预约 |
+| POST | `/api/auth/register` | 注册（body `username` + `password`），返回 token |
+| POST | `/api/auth/login` | 登录，返回 token |
+| GET | `/api/auth/me` | 当前用户（需登录） |
+| POST | `/api/slots` | 新建排班位（需登录，创建者取自 token） |
+| DELETE | `/api/slots/:id` | 删除（仅创建者；身份取自 token） |
+| POST | `/api/slots/:id/book` | 预约（身份取自 token） |
+| POST | `/api/bookings/:id/cancel` | 取消预约（仅预约者本人） |
 
 业务错误码：`INVALID_INPUT(400)` / `PAST_SLOT(409)` / `SLOT_NOT_FOUND(404)` / `SLOT_FULL(409)` / `OVERLAP(409)` / `NOT_OWNER(403)` / `BOOKING_NOT_FOUND(404)` / `SLOT_DELETED(410)`。
 
@@ -210,7 +222,7 @@ code/
 
 ## 已知局限（如实记录）
 
-- **无真正的身份认证**：用昵称 + `localStorage` 模拟，`creatorId` 可被篡改（客户端只做 UI 权限，服务端仍按创建者校验删除）。真实项目应替换为 JWT / session 并做服务端鉴权。
+- **无刷新令牌 / 令牌撤销**：使用 7 天 JWT，过期后需重新登录；未实现 refresh token 与登出即时失效（可在服务端加黑名单实现）。
 - **单进程 / 单 SQLite 文件**：适合演示和中小规模。多人高并发、多实例部署需换 Postgres + Redis（缓存/分发 Socket）。
 - **未跑 Lighthouse 基准**：只有构建层 gzip 数据 + 代码层虚拟化保证。
 - **npm audit 告警**（依赖审计，详见 `docs`）：vite/vitest（仅本地 dev-server）与 express/qs（中等 DoS），均有默认限制兜底；升级 vite 8 / express 5 属破坏性变更，暂未做。
@@ -219,7 +231,7 @@ code/
 
 ## 逐步完善方向
 
-- 真正的登录 + 服务端鉴权，替代昵称模拟。
+- refresh token / 令牌撤销（服务端会话黑名单）。
 - 用户维度视图（"我的预约"）。
 - 周/月日历视图切换。
 - 用 Postgres + Redis 做多实例横向扩展。

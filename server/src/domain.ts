@@ -25,7 +25,7 @@ export interface NewSlotInput {
   startTime: number;
   endTime: number;
   capacity?: number;
-  creatorId: string;
+  creatorId: number;
 }
 
 /** 校验通过、规范化之后的排班位（description 一定为字符串） */
@@ -35,7 +35,7 @@ export interface ValidatedSlot {
   startTime: number;
   endTime: number;
   capacity: number;
-  creatorId: string;
+  creatorId: number;
 }
 
 export const MIN_SLOT_DURATION_MS = 1; // 至少 1ms，实际按分钟
@@ -77,7 +77,7 @@ export function validateNewSlot(input: NewSlotInput, nowMs: number): Result<Vali
     startTime,
     endTime,
     capacity,
-    creatorId: String(input.creatorId).trim(),
+    creatorId: Number(input.creatorId),
   });
 }
 
@@ -117,9 +117,16 @@ export function tryCancelBooking(bookingStatus: string, slotStart: number, nowMs
   return ok();
 }
 
-export function canDeleteSlot(creatorId: string, requesterId: string): Result {
-  if (String(requesterId).trim() !== String(creatorId).trim()) {
+export function canDeleteSlot(creatorId: number, requesterId: number): Result {
+  if (Number(requesterId) !== Number(creatorId)) {
     return fail("NOT_OWNER", "只有创建者能删除该排班");
+  }
+  return ok();
+}
+
+export function canManageBooking(ownerId: number, requesterId: number): Result {
+  if (Number(requesterId) !== Number(ownerId)) {
+    return fail("NOT_OWNER", "只有预约者本人能取消");
   }
   return ok();
 }

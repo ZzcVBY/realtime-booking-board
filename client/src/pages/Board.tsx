@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { ApiError, Booking, SlotView } from "../types";
+import type { ApiError, AuthUser, Booking, CreateSlotInput, SlotView } from "../types";
 import { useSlots } from "../hooks/useSlots";
 import { useBook, useCancel } from "../hooks/useBooking";
-import { useUser } from "../hooks/useUser";
 import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { useToast } from "../hooks/useToast";
 import { SlotList } from "../components/SlotList";
 import { CreateSlotModal } from "../components/CreateSlotModal";
 
-export function Board() {
-  const { user, setUser } = useUser();
+interface Props {
+  auth: AuthUser;
+  onLogout: () => void;
+}
+
+export function Board({ auth, onLogout }: Props) {
   const { data: slots = [], isLoading, isError } = useSlots();
   const queryClient = useQueryClient();
   const { toasts, push } = useToast();
@@ -27,7 +30,7 @@ export function Board() {
       (s) =>
         s.title.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
-        s.creatorId.toLowerCase().includes(q),
+        s.creatorName.toLowerCase().includes(q),
     );
   }, [slots, debounced]);
 
@@ -35,20 +38,18 @@ export function Board() {
     e && typeof e === "object" && "message" in e ? (e as ApiError).message : "请求失败";
 
   const createSlot = useMutation({
-    mutationFn: (input: Parameters<typeof api.createSlot>[0]) => api.createSlot(input),
+    mutationFn: (input: CreateSlotInput) => api.createSlot(input),
     onSuccess: () => setModalOpen(false),
     onError: (e) => push(errMsg(e), "error"),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
   });
 
-  // 预约 / 取消由 useBooking 提供乐观更新，这里在各回调里补 toast
   const bookAction = useBook();
   const cancelAction = useCancel();
 
   const handleBook = (slot: SlotView) => {
-    if (!user) return push("请先填写昵称", "error");
     bookAction.mutate(
-      { slotId: slot.id, userId: user },
+      { slotId: slot.id, userId: auth.id, userName: auth.username },
       {
         onError: (e) => push(errMsg(e), "error"),
         onSuccess: () => push(`已预约「${slot.title}」`, "success"),
@@ -57,15 +58,18 @@ export function Board() {
   };
 
   const handleCancel = (booking: Booking) => {
-    cancelAction.mutate({ bookingId: booking.id }, {
-      onError: (e) => push(errMsg(e), "error"),
-      onSuccess: () => push("已取消预约", "success"),
-    });
+    cancelAction.mutate(
+      { bookingId: booking.id },
+      {
+        onError: (e) => push(errMsg(e), "error"),
+        onSuccess: () => push("已取消预约", "success"),
+      },
+    );
   };
 
   const handleDelete = (slot: SlotView) => {
     api
-      .deleteSlot(slot.id, user)
+      .deleteSlot(slot.id)
       .then(() => push(`已删除「${slot.title}」`, "success"))
       .catch((e) => push(errMsg(e), "error"))
       .finally(() => queryClient.invalidateQueries({ queryKey: ["slots"] }));
@@ -79,17 +83,18 @@ export function Board() {
           <p className="text-sm text-slate-400">多人实时同步 · 后端权威校验 · 乐观更新</p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            className="w-40 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
-            placeholder="你的昵称"
-          />
+          <span className="text-sm text-slate-300">你好，{auth.username}</span>
           <button
             onClick={() => setModalOpen(true)}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
           >
             新建排班
+          </button>
+          <button
+            onClick={onLogout}
+            className="rounded-lg px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
+          >
+            退出
           </button>
         </div>
       </header>
@@ -101,9 +106,7 @@ export function Board() {
           className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
           placeholder="搜索标题 / 说明 / 创建者…"
         />
-        <span className="whitespace-nowrap text-xs text-slate-500">
-          共 {filtered.length} 条
-        </span>
+        <span className="whitespace-nowrap text-xs text-slate-500">共 {filtered.length} 条</span>
       </div>
 
       {isLoading && <p className="mt-8 text-center text-slate-400">加载中…</p>}
@@ -115,7 +118,7 @@ export function Board() {
       <div className="mt-4">
         <SlotList
           slots={filtered}
-          currentUser={user}
+          currentUserId={auth.id}
           onBook={handleBook}
           onCancel={handleCancel}
           onDelete={handleDelete}
@@ -125,7 +128,7 @@ export function Board() {
       <CreateSlotModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onSubmit={(input) => createSlot.mutate({ ...input, creatorId: user || "匿名" })}
+        onSubmit={(input) => createSlot.mutate(input)}
       />
 
       <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">

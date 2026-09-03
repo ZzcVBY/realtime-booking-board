@@ -5,6 +5,7 @@ import {
   tryBook,
   tryCancelBooking,
   canDeleteSlot,
+  canManageBooking,
 } from "../src/domain.js";
 import type { Slot, OccupiedInterval } from "../src/types.js";
 
@@ -20,7 +21,7 @@ function makeSlot(over: Partial<Slot> = {}): Slot {
     startTime: NOW + DAY,
     endTime: NOW + DAY + H,
     capacity: 1,
-    creatorId: "alice",
+    creatorId: 1,
     createdAt: NOW,
     ...over,
   };
@@ -29,7 +30,7 @@ function makeSlot(over: Partial<Slot> = {}): Slot {
 describe("validateNewSlot", () => {
   it("接受合法输入并规范化", () => {
     const r = validateNewSlot(
-      { title: "  晨会  ", startTime: NOW + DAY, endTime: NOW + DAY + H, creatorId: "alice" },
+      { title: "  晨会  ", startTime: NOW + DAY, endTime: NOW + DAY + H, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(true);
@@ -41,7 +42,7 @@ describe("validateNewSlot", () => {
 
   it("拒绝空标题", () => {
     const r = validateNewSlot(
-      { title: "   ", startTime: NOW + DAY, endTime: NOW + DAY + H, creatorId: "alice" },
+      { title: "   ", startTime: NOW + DAY, endTime: NOW + DAY + H, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(false);
@@ -50,7 +51,7 @@ describe("validateNewSlot", () => {
 
   it("拒绝结束早于或等于开始", () => {
     const r = validateNewSlot(
-      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY, creatorId: "alice" },
+      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(false);
@@ -58,7 +59,7 @@ describe("validateNewSlot", () => {
 
   it("拒绝过去的时间", () => {
     const r = validateNewSlot(
-      { title: "x", startTime: NOW - H, endTime: NOW, creatorId: "alice" },
+      { title: "x", startTime: NOW - H, endTime: NOW, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(false);
@@ -67,7 +68,7 @@ describe("validateNewSlot", () => {
 
   it("拒绝超出容量的容量值", () => {
     const r = validateNewSlot(
-      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY + H, capacity: 0, creatorId: "alice" },
+      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY + H, capacity: 0, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(false);
@@ -75,7 +76,7 @@ describe("validateNewSlot", () => {
 
   it("拒绝超过 6 小时的时长", () => {
     const r = validateNewSlot(
-      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY + 7 * H, creatorId: "alice" },
+      { title: "x", startTime: NOW + DAY, endTime: NOW + DAY + 7 * H, creatorId: 1 },
       NOW,
     );
     expect(r.ok).toBe(false);
@@ -135,11 +136,19 @@ describe("tryCancelBooking / canDeleteSlot", () => {
     expect(tryCancelBooking("active", NOW + DAY, NOW).ok).toBe(true);
   });
   it("非创建者不能删除", () => {
-    const r = canDeleteSlot("alice", "bob");
+    const r = canDeleteSlot(1, 2);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe("NOT_OWNER");
   });
   it("创建者可以删除", () => {
-    expect(canDeleteSlot("alice", "alice").ok).toBe(true);
+    expect(canDeleteSlot(1, 1).ok).toBe(true);
+  });
+  it("非预约者不能取消", () => {
+    const r = canManageBooking(1, 2);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("NOT_OWNER");
+  });
+  it("预约者可以取消", () => {
+    expect(canManageBooking(7, 7).ok).toBe(true);
   });
 });

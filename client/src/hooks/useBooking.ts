@@ -11,14 +11,16 @@ export function useBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ slotId, userId }: { slotId: number; userId: string }) => api.book(slotId, userId),
-    onMutate: async ({ slotId, userId }) => {
+    mutationFn: ({ slotId }: { slotId: number; userId: number; userName: string }) =>
+      api.book(slotId),
+    onMutate: async ({ slotId, userId, userName }) => {
       await queryClient.cancelQueries({ queryKey: ["slots"] });
       const previous = queryClient.getQueryData<SlotView[]>(["slots"]);
       const tempBooking: Booking = {
         id: -Date.now(),
         slotId,
         userId,
+        userName,
         status: "active",
         createdAt: Date.now(),
       };

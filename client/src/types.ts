@@ -1,26 +1,45 @@
+export interface User {
+  id: number;
+  username: string;
+  createdAt: number;
+}
+
+/** 登录态：token + 当前用户 */
+export interface AuthUser {
+  id: number;
+  username: string;
+  token: string;
+}
+
 export interface Slot {
   id: number;
   title: string;
   description: string;
   startTime: number; // unix ms
-  endTime: number; // unix ms
+  endTime: number;
   capacity: number;
-  creatorId: string;
+  creatorId: number;
   createdAt: number;
 }
 
 export interface Booking {
   id: number;
   slotId: number;
-  userId: string;
+  userId: number;
+  userName: string;
   status: "active" | "cancelled";
   createdAt: number;
 }
 
-/** 服务端返回的排班位聚合视图 */
 export interface SlotView extends Slot {
+  creatorName: string;
   bookings: Booking[];
   bookedCount: number;
+}
+
+export interface AuthData {
+  token: string;
+  user: User;
 }
 
 export interface ApiError {
@@ -35,5 +54,4 @@ export interface CreateSlotInput {
   startTime: number;
   endTime: number;
   capacity?: number;
-  creatorId: string;
 }

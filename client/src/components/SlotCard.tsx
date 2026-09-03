@@ -4,7 +4,7 @@ import { fmtRange, isPast } from "../lib/format";
 
 interface Props {
   slot: SlotView;
-  currentUser: string;
+  currentUserId: number;
   onBook: (slot: SlotView) => void;
   onCancel: (booking: Booking) => void;
   onDelete: (slot: SlotView) => void;
@@ -15,16 +15,16 @@ interface Props {
  */
 export const SlotCard = memo(function SlotCard({
   slot,
-  currentUser,
+  currentUserId,
   onBook,
   onCancel,
   onDelete,
 }: Props) {
   const full = slot.bookedCount >= slot.capacity;
   const past = isPast(slot.startTime);
-  const myBooking = slot.bookings.find((b) => b.userId === currentUser);
+  const myBooking = slot.bookings.find((b) => b.userId === currentUserId);
   const mine = myBooking?.status === "active";
-  const isCreator = slot.creatorId === currentUser;
+  const isCreator = slot.creatorId === currentUserId;
 
   return (
     <article className="mb-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4 transition hover:border-slate-700">
@@ -45,7 +45,7 @@ export const SlotCard = memo(function SlotCard({
             </button>
           )}
           <span className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-400">
-            创建者 {slot.creatorId}
+            创建者 {slot.creatorName}
           </span>
         </div>
       </header>
@@ -73,7 +73,7 @@ export const SlotCard = memo(function SlotCard({
               key={b.id}
               className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300"
             >
-              {b.userId}
+              {b.userName}
             </span>
           ))}
           {slot.bookedCount === 0 && <span className="text-xs text-slate-500">暂无预约</span>}
@@ -89,7 +89,7 @@ export const SlotCard = memo(function SlotCard({
             </button>
           ) : (
             <button
-              disabled={!currentUser || full || past}
+              disabled={full || past}
               onClick={() => onBook(slot)}
               className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-500"
             >

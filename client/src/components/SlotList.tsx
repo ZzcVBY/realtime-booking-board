@@ -5,7 +5,7 @@ import { SlotCard } from "./SlotCard";
 
 interface Props {
   slots: SlotView[];
-  currentUser: string;
+  currentUserId: number;
   onBook: (slot: SlotView) => void;
   onCancel: (booking: Booking) => void;
   onDelete: (slot: SlotView) => void;
@@ -17,7 +17,7 @@ interface Props {
  */
 export const SlotList = memo(function SlotList({
   slots,
-  currentUser,
+  currentUserId,
   onBook,
   onCancel,
   onDelete,
@@ -42,7 +42,7 @@ export const SlotList = memo(function SlotList({
             >
               <SlotCard
                 slot={slot}
-                currentUser={currentUser}
+                currentUserId={currentUserId}
                 onBook={onBook}
                 onCancel={onCancel}
                 onDelete={onDelete}
