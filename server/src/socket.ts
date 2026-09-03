@@ -2,7 +2,7 @@ import http from "node:http";
 import { Server } from "socket.io";
 import type { DatabaseSync } from "node:sqlite";
 import { listSlotViews } from "./db.js";
-import { verifyToken } from "./auth.js";
+import { verifyAccessToken } from "./auth.js";
 
 export interface RealtimeBridge {
   broadcast(event: string, payload: unknown): void;
@@ -21,7 +21,7 @@ export function attachRealtime(httpServer: http.Server, db: DatabaseSync): Realt
   // 连接握手时校验 token，未授权直接拒绝，避免未登录者收到实时广播
   io.use((socket, next) => {
     const token = (socket.handshake.auth as { token?: string } | undefined)?.token;
-    const user = token ? verifyToken(token) : null;
+    const user = token ? verifyAccessToken(token) : null;
     if (!user) return next(new Error("unauthorized"));
     (socket.data as { user: { sub: number; username: string } }).user = user;
     next();

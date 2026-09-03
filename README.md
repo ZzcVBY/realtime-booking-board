@@ -14,7 +14,7 @@
 | 需求/设计稿 → 界面 | 响应式布局，同一组件在手机/桌面自适应 |
 | 交互 + 数据展示 | 新建 / 预约 / 取消 / 删除，真实接口，数据来自后端 + 实时推送 |
 | 后端交互 → 全链路 | 自己写的 REST + 内嵌 SQLite + 外键级联 |
-| 鉴权 | JWT（服务端签发/校验）+ scrypt 密码哈希 + 权限校验，所有写操作身份均取自 token |
+| 鉴权 | JWT 双 token（短效 access + 可撤销 refresh）+ scrypt 密码哈希 + 权限校验，身份取自 token |
 | 实时协同 | Socket.IO，多人打开页面，任何写操作所有端即时同步 |
 | 性能 | 虚拟化列表 / 请求缓存去重 / 代码分包 / 防抖（见下方实测数据） |
 | AI 判断 | 样板代码交给 AI，核心规则、并发一致性、性能路径、安全边界自己掌控 |
@@ -93,7 +93,9 @@ graph TD
 
 ### 5. 真正的登录鉴权（安全边界）
 - 密码用 **crypto.scrypt 加盐哈希**存储（零原生依赖），不存明文。
-- 登录/注册后签发 **JWT**（7 天），后续请求带 `Authorization: Bearer <token>`。
+- **双 token**：`accessToken`（15 分钟 JWT，无状态，用于 `/api`）与 `refreshToken`（30 天，服务端哈希存储、可轮换与撤销）。
+- 后续请求带 `Authorization: Bearer <accessToken>`；过期时前端自动用 refresh token 换新并重试一次。
+- `/api/auth/refresh` 会**轮换**：作废旧 refresh token、签发新的一对（防止重放）；`/api/auth/logout` **撤销**该 refresh token。
 - **身份一律从 token 解析**，前端 body 不再传 `userId` / `creatorId`，无法通过改请求体冒充别人。
 - 服务端按 token 中的身份做权限校验：只有创建者能删除排班、只有预约者能取消预约。
 - 除 `/api/auth/*` 与健康检查外，其余 `/api` 全部要求登录；Socket.IO 连接握手同样校验 token。
@@ -181,8 +183,10 @@ node scripts/realtime-smoke.mjs
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查 |
 | GET | `/api/slots` | 列出全部排班位（含预约与占用数） |
-| POST | `/api/auth/register` | 注册（body `username` + `password`），返回 token |
-| POST | `/api/auth/login` | 登录，返回 token |
+| POST | `/api/auth/register` | 注册（body `username` + `password`），返回 accessToken + refreshToken + user |
+| POST | `/api/auth/login` | 登录，返回 accessToken + refreshToken + user |
+| POST | `/api/auth/refresh` | 用 refreshToken 轮换，返回新的一对（旧 refresh 作废） |
+| POST | `/api/auth/logout` | 撤销 refreshToken（服务端失效） |
 | GET | `/api/auth/me` | 当前用户（需登录） |
 | POST | `/api/slots` | 新建排班位（需登录，创建者取自 token） |
 | DELETE | `/api/slots/:id` | 删除（仅创建者；身份取自 token） |
@@ -222,7 +226,8 @@ code/
 
 ## 已知局限（如实记录）
 
-- **无刷新令牌 / 令牌撤销**：使用 7 天 JWT，过期后需重新登录；未实现 refresh token 与登出即时失效（可在服务端加黑名单实现）。
+- **access token 无法即时撤销**：15 分钟有效期内的已签发 access token 无法主动作废（无状态 JWT）；登出会撤销 refresh token，使其无法再续期。若需"立刻踢下线"，要引入服务端黑名单/会话表。
+- **refresh token 重用检测为一级**：轮换会让旧 refresh token 失效，但未做"家族树"级重用检测（检测到已轮换 token 被再次使用即撤销整棵）。可再加。
 - **单进程 / 单 SQLite 文件**：适合演示和中小规模。多人高并发、多实例部署需换 Postgres + Redis（缓存/分发 Socket）。
 - **未跑 Lighthouse 基准**：只有构建层 gzip 数据 + 代码层虚拟化保证。
 - **npm audit 告警**（依赖审计，详见 `docs`）：vite/vitest（仅本地 dev-server）与 express/qs（中等 DoS），均有默认限制兜底；升级 vite 8 / express 5 属破坏性变更，暂未做。
@@ -231,7 +236,7 @@ code/
 
 ## 逐步完善方向
 
-- refresh token / 令牌撤销（服务端会话黑名单）。
+- access token 即时撤销（服务端会话黑名单 / `jti` + 黑名单）。
 - 用户维度视图（"我的预约"）。
 - 周/月日历视图切换。
 - 用 Postgres + Redis 做多实例横向扩展。

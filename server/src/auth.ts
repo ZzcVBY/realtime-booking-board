@@ -1,11 +1,12 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { type NextFunction, type Request, type Response } from "express";
 import type { AuthUser } from "./types.js";
 
 // 生产环境必须用环境变量提供；默认值仅便于本地开发。
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
-const TOKEN_TTL = "7d";
+const ACCESS_TOKEN_TTL = "15m";
+export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 天
 
 /** 密码哈希：scrypt 加盐，零原生依赖 */
 export function hashPassword(password: string): { hash: string; salt: string } {
@@ -20,11 +21,14 @@ export function verifyPassword(password: string, salt: string, expectedHash: str
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export function signToken(userId: number, username: string): string {
-  return jwt.sign({ username }, JWT_SECRET, { subject: String(userId), expiresIn: TOKEN_TTL });
+export function signAccessToken(userId: number, username: string): string {
+  return jwt.sign({ username }, JWT_SECRET, {
+    subject: String(userId),
+    expiresIn: ACCESS_TOKEN_TTL,
+  });
 }
 
-export function verifyToken(token: string): AuthUser | null {
+export function verifyAccessToken(token: string): AuthUser | null {
   try {
     const payload = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & { username?: string };
     const sub = Number(payload.sub);
@@ -33,6 +37,15 @@ export function verifyToken(token: string): AuthUser | null {
   } catch {
     return null;
   }
+}
+
+/** 生成不透明 refresh token（客户端持有原文，服务端只存哈希） */
+export function generateRefreshToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 /** 用户名校验：字母/数字/下划线/短横线，2–32 位 */
@@ -56,7 +69,7 @@ export function validatePassword(pw: unknown): string | null {
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers.authorization ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
-  const user = token ? verifyToken(token) : null;
+  const user = token ? verifyAccessToken(token) : null;
   if (!user) {
     res.status(401).json({ ok: false, code: "UNAUTHORIZED", message: "请先登录" });
     return;

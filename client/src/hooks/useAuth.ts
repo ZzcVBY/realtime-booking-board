@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { authApi, clearToken, getToken, setToken } from "../lib/api";
+import {
+  authApi,
+  clearToken,
+  clearRefreshToken,
+  getRefreshToken,
+  getToken,
+  setRefreshToken,
+  setToken,
+} from "../lib/api";
 import type { AuthUser } from "../types";
 
 /**
@@ -21,20 +29,31 @@ export function useAuth() {
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await authApi.login(username, password);
-    setToken(data.token);
-    setAuth({ id: data.user.id, username: data.user.username, token: data.token });
+    setToken(data.accessToken);
+    setRefreshToken(data.refreshToken);
+    setAuth({ id: data.user.id, username: data.user.username, token: data.accessToken });
     return data;
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
     const data = await authApi.register(username, password);
-    setToken(data.token);
-    setAuth({ id: data.user.id, username: data.user.username, token: data.token });
+    setToken(data.accessToken);
+    setRefreshToken(data.refreshToken);
+    setAuth({ id: data.user.id, username: data.user.username, token: data.accessToken });
     return data;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const rt = getRefreshToken();
+    if (rt) {
+      try {
+        await authApi.logout(rt);
+      } catch {
+        // 即使撤销失败也本地登出
+      }
+    }
     clearToken();
+    clearRefreshToken();
     setAuth(null);
   }, []);
 

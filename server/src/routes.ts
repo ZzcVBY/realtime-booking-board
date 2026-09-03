@@ -13,6 +13,9 @@ import {
   createUser,
   getUserByUsername,
   getUserById,
+  createRefreshToken,
+  getRefreshTokenByHash,
+  revokeRefreshToken,
 } from "./db.js";
 import {
   validateNewSlot,
@@ -24,7 +27,10 @@ import {
 import {
   hashPassword,
   verifyPassword,
-  signToken,
+  signAccessToken,
+  generateRefreshToken,
+  hashToken,
+  REFRESH_TOKEN_TTL_MS,
   requireAuth,
   getAuthUser,
   validateUsername,
@@ -54,6 +60,13 @@ function mapError(res: Response, code: ErrorCode, message = "操作失败"): voi
 export function createAuthRouter(db: DatabaseSync): Router {
   const router = Router();
 
+  function issueSession(user: { id: number; username: string }) {
+    const accessToken = signAccessToken(user.id, user.username);
+    const refreshToken = generateRefreshToken();
+    createRefreshToken(db, user.id, hashToken(refreshToken), Date.now() + REFRESH_TOKEN_TTL_MS);
+    return { accessToken, refreshToken, user };
+  }
+
   router.post("/register", (req, res) => {
     const { username, password } = req.body ?? {};
     const nameErr = validateUsername(username);
@@ -66,8 +79,7 @@ export function createAuthRouter(db: DatabaseSync): Router {
     }
     const { hash, salt } = hashPassword(password);
     const user = createUser(db, username, hash, salt);
-    const token = signToken(user.id, user.username);
-    res.status(201).json({ ok: true, data: { token, user } });
+    res.status(201).json({ ok: true, data: issueSession(user) });
   });
 
   router.post("/login", (req, res) => {
@@ -76,8 +88,30 @@ export function createAuthRouter(db: DatabaseSync): Router {
     if (!record || !verifyPassword(String(password ?? ""), record.salt, record.passwordHash)) {
       return res.status(401).json({ ok: false, code: "INVALID_CREDENTIALS", message: "用户名或密码错误" });
     }
-    const token = signToken(record.id, record.username);
-    res.json({ ok: true, data: { token, user: { id: record.id, username: record.username, createdAt: record.createdAt } } });
+    res.json({
+      ok: true,
+      data: issueSession({ id: record.id, username: record.username }),
+    });
+  });
+
+  router.post("/refresh", (req, res) => {
+    const { refreshToken } = req.body ?? {};
+    const record = getRefreshTokenByHash(db, hashToken(String(refreshToken ?? "")));
+    if (!record || record.revoked === 1 || record.expiresAt < Date.now()) {
+      return res.status(401).json({ ok: false, code: "INVALID_REFRESH", message: "登录已失效，请重新登录" });
+    }
+    const user = getUserById(db, record.userId);
+    if (!user) return res.status(401).json({ ok: false, code: "USER_NOT_FOUND", message: "用户不存在" });
+    // 轮换：作废旧 refresh，签发新的一对
+    revokeRefreshToken(db, record.id);
+    res.json({ ok: true, data: issueSession(user) });
+  });
+
+  router.post("/logout", (req, res) => {
+    const { refreshToken } = req.body ?? {};
+    const record = getRefreshTokenByHash(db, hashToken(String(refreshToken ?? "")));
+    if (record && record.revoked === 0) revokeRefreshToken(db, record.id);
+    res.json({ ok: true });
   });
 
   router.get("/me", requireAuth, (req, res) => {

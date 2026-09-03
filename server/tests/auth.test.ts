@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   hashPassword,
   verifyPassword,
-  signToken,
-  verifyToken,
+  signAccessToken,
+  verifyAccessToken,
+  generateRefreshToken,
+  hashToken,
   validateUsername,
   validatePassword,
 } from "../src/auth.js";
@@ -26,13 +28,24 @@ describe("password hashing", () => {
 
 describe("jwt token", () => {
   it("签发后可验证并还原身份", () => {
-    const token = signToken(42, "alice");
-    const payload = verifyToken(token);
+    const token = signAccessToken(42, "alice");
+    const payload = verifyAccessToken(token);
     expect(payload).toEqual({ sub: 42, username: "alice" });
   });
   it("非法 token 返回 null", () => {
-    expect(verifyToken("not-a-jwt")).toBeNull();
-    expect(verifyToken("")).toBeNull();
+    expect(verifyAccessToken("not-a-jwt")).toBeNull();
+    expect(verifyAccessToken("")).toBeNull();
+  });
+});
+
+describe("refresh token", () => {
+  it("生成长随机不透明 token，且哈希稳定", () => {
+    const a = generateRefreshToken();
+    const b = generateRefreshToken();
+    expect(a).not.toBe(b);
+    expect(a.length).toBeGreaterThan(20);
+    expect(hashToken(a)).toBe(hashToken(a));
+    expect(hashToken(a)).not.toBe(hashToken(b));
   });
 });
 

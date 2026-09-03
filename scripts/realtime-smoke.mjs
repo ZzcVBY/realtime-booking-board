@@ -17,13 +17,13 @@ async function ensureUser() {
   const body = await res.json();
   if (!res.ok && body.code !== "INVALID_INPUT") throw new Error("register failed");
   // 已存在则登录，否则用本次注册 token
-  if (body.ok) return body.data.token;
+  if (body.ok) return body.data.accessToken;
   const login = await fetch(`${BASE}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: USER, password: "secret123" }),
   });
-  return (await login.json()).data.token;
+  return (await login.json()).data.accessToken;
 }
 
 const token = await ensureUser();

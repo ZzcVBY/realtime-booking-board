@@ -17,13 +17,13 @@ async function ensureToken() {
     body: JSON.stringify({ username: SEED_USER, password: "secret123" }),
   });
   const body = await res.json();
-  if (body.ok) return body.data.token;
+  if (body.ok) return body.data.accessToken;
   const login = await fetch(`${BASE}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: SEED_USER, password: "secret123" }),
   });
-  return (await login.json()).data.token;
+  return (await login.json()).data.accessToken;
 }
 
 const token = await ensureToken();

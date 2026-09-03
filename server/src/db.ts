@@ -1,5 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
-import type { Slot, Booking, SlotView, OccupiedInterval, User } from "./types.js";
+import type {
+  Slot,
+  Booking,
+  SlotView,
+  OccupiedInterval,
+  User,
+  RefreshTokenRecord,
+} from "./types.js";
 
 /**
  * 数据层：用 Node 内置 node:sqlite（零原生依赖），WAL 模式。
@@ -35,8 +42,63 @@ export function initDb(path: string = process.env.DB_PATH ?? "./data.db"): Datab
     );
     CREATE INDEX IF NOT EXISTS idx_bookings_slot ON bookings(slot_id);
     CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id);
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      revoked INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
   `);
   return db;
+}
+
+// ---------- refresh tokens ----------
+export function createRefreshToken(
+  db: DatabaseSync,
+  userId: number,
+  tokenHash: string,
+  expiresAt: number,
+): RefreshTokenRecord {
+  const createdAt = Date.now();
+  const res = db
+    .prepare(
+      "INSERT INTO refresh_tokens (user_id, token_hash, expires_at, revoked, created_at) VALUES (?, ?, ?, 0, ?)",
+    )
+    .run(userId, tokenHash, expiresAt, createdAt);
+  return {
+    id: Number(res.lastInsertRowid),
+    userId,
+    tokenHash,
+    expiresAt,
+    revoked: 0,
+  };
+}
+
+export function getRefreshTokenByHash(
+  db: DatabaseSync,
+  tokenHash: string,
+): RefreshTokenRecord | undefined {
+  const row = db
+    .prepare(
+      `SELECT id, user_id as userId, token_hash as tokenHash, expires_at as expiresAt,
+              revoked, created_at as createdAt
+       FROM refresh_tokens WHERE token_hash = ?`,
+    )
+    .get(tokenHash) as unknown as RefreshTokenRecord | undefined;
+  return row;
+}
+
+export function revokeRefreshToken(db: DatabaseSync, id: number): boolean {
+  const res = db.prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?").run(id);
+  return res.changes > 0;
+}
+
+export function revokeAllRefreshTokensForUser(db: DatabaseSync, userId: number): number {
+  const res = db.prepare("UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?").run(userId);
+  return Number(res.changes);
 }
 
 // ---------- users ----------

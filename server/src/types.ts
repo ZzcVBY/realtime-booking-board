@@ -44,3 +44,11 @@ export interface AuthUser {
   sub: number;
   username: string;
 }
+
+export interface RefreshTokenRecord {
+  id: number;
+  userId: number;
+  tokenHash: string;
+  expiresAt: number;
+  revoked: number; // 0/1
+}

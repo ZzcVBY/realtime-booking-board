@@ -38,7 +38,8 @@ export interface SlotView extends Slot {
 }
 
 export interface AuthData {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   user: User;
 }
 
