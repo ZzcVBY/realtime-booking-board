@@ -38,6 +38,8 @@ export const SlotList = memo(function SlotList({
           return (
             <div
               key={item.key}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
               style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${item.start}px)` }}
             >
               <SlotCard

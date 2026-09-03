@@ -19,12 +19,12 @@ function toLocalInput(ms: number) {
 }
 
 export function CreateSlotModal({ open, onClose, onSubmit }: Props) {
-  const now = Date.now();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [capacity, setCapacity] = useState("1");
-  const [start, setStart] = useState(toLocalInput(now + 60 * 60 * 1000));
-  const [end, setEnd] = useState(toLocalInput(now + 2 * 60 * 60 * 1000));
+  // 用惰性初始化，避免在渲染时调用 Date.now()（纯函数规则）
+  const [start, setStart] = useState(() => toLocalInput(Date.now() + 60 * 60 * 1000));
+  const [end, setEnd] = useState(() => toLocalInput(Date.now() + 2 * 60 * 60 * 1000));
 
   if (!open) return null;
 

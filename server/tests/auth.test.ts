@@ -11,17 +11,17 @@ import {
 } from "../src/auth.js";
 
 describe("password hashing", () => {
-  it("哈希后可验证正确密码", () => {
-    const { hash, salt } = hashPassword("secret123");
-    expect(verifyPassword("secret123", salt, hash)).toBe(true);
+  it("哈希后可验证正确密码", async () => {
+    const { hash, salt } = await hashPassword("secret123");
+    expect(await verifyPassword("secret123", salt, hash)).toBe(true);
   });
-  it("错误密码验证失败", () => {
-    const { hash, salt } = hashPassword("secret123");
-    expect(verifyPassword("wrongpw", salt, hash)).toBe(false);
+  it("错误密码验证失败", async () => {
+    const { hash, salt } = await hashPassword("secret123");
+    expect(await verifyPassword("wrongpw", salt, hash)).toBe(false);
   });
-  it("不同盐产生不同哈希", () => {
-    const a = hashPassword("secret123");
-    const b = hashPassword("secret123");
+  it("不同盐产生不同哈希", async () => {
+    const a = await hashPassword("secret123");
+    const b = await hashPassword("secret123");
     expect(a.hash).not.toBe(b.hash);
   });
 });

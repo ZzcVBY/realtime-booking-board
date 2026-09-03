@@ -101,6 +101,15 @@ export function revokeAllRefreshTokensForUser(db: DatabaseSync, userId: number):
   return Number(res.changes);
 }
 
+/** 清理过期/已撤销的 refresh token（在每次签发新的时顺带做，避免表无限增长） */
+export function purgeRefreshTokens(db: DatabaseSync, olderThanMs: number): number {
+  const cutoff = Date.now() - olderThanMs;
+  const res = db
+    .prepare("DELETE FROM refresh_tokens WHERE revoked = 1 OR expires_at < ?")
+    .run(cutoff);
+  return Number(res.changes);
+}
+
 // ---------- users ----------
 export function createUser(
   db: DatabaseSync,

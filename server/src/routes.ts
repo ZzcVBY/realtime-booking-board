@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Response } from "express";
 import type { DatabaseSync } from "node:sqlite";
 import {
   listSlotViews,
@@ -16,6 +16,7 @@ import {
   createRefreshToken,
   getRefreshTokenByHash,
   revokeRefreshToken,
+  purgeRefreshTokens,
 } from "./db.js";
 import {
   validateNewSlot,
@@ -35,6 +36,7 @@ import {
   getAuthUser,
   validateUsername,
   validatePassword,
+  rateLimit,
 } from "./auth.js";
 import type { ErrorCode } from "./domain.js";
 
@@ -59,15 +61,19 @@ function mapError(res: Response, code: ErrorCode, message = "操作失败"): voi
 /** 公开的认证路由：注册 / 登录 / 当前用户 */
 export function createAuthRouter(db: DatabaseSync): Router {
   const router = Router();
+  // 登录/注册/刷新等敏感接口限流，防止暴力破解与刷量
+  router.use(rateLimit(30, 15 * 60 * 1000));
 
   function issueSession(user: { id: number; username: string }) {
+    // 顺带清理已撤销 / 过期超过 7 天的旧 refresh token
+    purgeRefreshTokens(db, 7 * 24 * 60 * 60 * 1000);
     const accessToken = signAccessToken(user.id, user.username);
     const refreshToken = generateRefreshToken();
     createRefreshToken(db, user.id, hashToken(refreshToken), Date.now() + REFRESH_TOKEN_TTL_MS);
     return { accessToken, refreshToken, user };
   }
 
-  router.post("/register", (req, res) => {
+  router.post("/register", async (req, res) => {
     const { username, password } = req.body ?? {};
     const nameErr = validateUsername(username);
     if (nameErr) return mapError(res, "INVALID_INPUT", nameErr);
@@ -77,15 +83,18 @@ export function createAuthRouter(db: DatabaseSync): Router {
     if (getUserByUsername(db, username)) {
       return mapError(res, "INVALID_INPUT", "该用户名已被注册");
     }
-    const { hash, salt } = hashPassword(password);
+    const { hash, salt } = await hashPassword(password);
     const user = createUser(db, username, hash, salt);
     res.status(201).json({ ok: true, data: issueSession(user) });
   });
 
-  router.post("/login", (req, res) => {
+  router.post("/login", async (req, res) => {
     const { username, password } = req.body ?? {};
     const record = getUserByUsername(db, String(username ?? ""));
-    if (!record || !verifyPassword(String(password ?? ""), record.salt, record.passwordHash)) {
+    if (
+      !record ||
+      !(await verifyPassword(String(password ?? ""), record.salt, record.passwordHash))
+    ) {
       return res.status(401).json({ ok: false, code: "INVALID_CREDENTIALS", message: "用户名或密码错误" });
     }
     res.json({

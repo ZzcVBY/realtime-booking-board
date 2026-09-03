@@ -24,8 +24,11 @@ ENV PORT=3000
 
 # 运行时依赖（workspaces 提升到根 node_modules）与构建产物
 COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/package.json ./server/package.json
+COPY --from=build /app/client/package.json ./client/package.json
+COPY --from=build /app/node_modules ./node_modules
+# 只保留生产依赖，去掉 vite/vitest/tsx/typescript 等 dev 依赖，缩小镜像
+RUN npm prune --omit=dev
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/client/dist ./client/dist
 

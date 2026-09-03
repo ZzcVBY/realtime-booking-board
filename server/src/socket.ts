@@ -12,9 +12,13 @@ export interface RealtimeBridge {
  * 实时层：基于 Socket.IO。所有写操作后，由 routes 通过 broadcast
  * 把服务端权威状态推给所有客户端，实现"多人所见即所得"。
  */
-export function attachRealtime(httpServer: http.Server, db: DatabaseSync): RealtimeBridge {
+export function attachRealtime(
+  httpServer: http.Server,
+  db: DatabaseSync,
+  allowedOrigins: string[],
+): RealtimeBridge {
   const io = new Server(httpServer, {
-    cors: { origin: "*" },
+    cors: { origin: allowedOrigins.length ? allowedOrigins : true },
     transports: ["websocket", "polling"],
   });
 

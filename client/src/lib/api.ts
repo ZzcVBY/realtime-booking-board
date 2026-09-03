@@ -3,6 +3,7 @@ import type { AuthData, Booking, CreateSlotInput, Slot, SlotView, User } from ".
 const BASE = "/api";
 const TOKEN_KEY = "rbb_token";
 const REFRESH_KEY = "rbb_refresh";
+const USER_KEY = "rbb_user";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -21,6 +22,30 @@ export function setRefreshToken(token: string): void {
 }
 export function clearRefreshToken(): void {
   localStorage.removeItem(REFRESH_KEY);
+}
+export function getUser(): { id: number; username: string } | null {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { id: number; username: string };
+  } catch {
+    return null;
+  }
+}
+export function setUser(user: { id: number; username: string }): void {
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+export function clearUser(): void {
+  localStorage.removeItem(USER_KEY);
+}
+
+/** 判断是否为"鉴权失败"类错误：仅这类才应该登出；网络抖动不算 */
+export function isAuthError(e: unknown): boolean {
+  if (e && typeof e === "object" && "code" in e) {
+    const code = (e as { code: string }).code;
+    return ["UNAUTHORIZED", "INVALID_REFRESH", "INVALID_CREDENTIALS", "USER_NOT_FOUND"].includes(code);
+  }
+  return false;
 }
 
 /** access 过期时用它换新；缓存并发请求以便多个 401 同时只刷新一次 */
@@ -57,15 +82,11 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
     },
   });
   if (res.status === 401 && !retried) {
-    try {
-      refreshPromise ??= refreshSession().finally(() => {
-        refreshPromise = null;
-      });
-      await refreshPromise;
-      return request<T>(path, init, true);
-    } catch (err) {
-      throw err;
-    }
+    refreshPromise ??= refreshSession().finally(() => {
+      refreshPromise = null;
+    });
+    await refreshPromise;
+    return request<T>(path, init, true);
   }
   const body = await res.json();
   if (!res.ok) throw body;

@@ -145,6 +145,9 @@ npm test
 # 4. 类型检查
 npm run typecheck
 
+# 4.5 代码检查（ESLint + React Hooks + TS 规则）
+npm run lint
+
 # 5. 生产构建（server 出 dist，client 出 dist）
 npm run build
 

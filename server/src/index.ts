@@ -12,12 +12,17 @@ import { requireAuth } from "./auth.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
 const app = express();
-app.use(cors());
+// CORS 白名单：同源/无 Origin 放行，跨域仅允许显式配置的来源（默认开发来源）
+const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173,http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin)) }));
 app.use(express.json());
 
 const db = initDb();
 const httpServer = http.createServer(app);
-const realtime = attachRealtime(httpServer, db);
+const realtime = attachRealtime(httpServer, db, allowedOrigins);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", createAuthRouter(db));
