@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+
+# local database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# tooling
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+# logs
+*.log
+npm-debug.log*
+
+# editor
+.vscode/
+.idea/
